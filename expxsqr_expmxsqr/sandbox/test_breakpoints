@@ -1,0 +1,40 @@
+#! /bin/bash
+#   -*-  mode:  shell-script  -*-
+#   Time-stamp:  "Modified on 15-October-2020 at 12:15:59 by jeff on Jeffs-MacBook-Pro.local"
+
+# set -vx
+
+printf "expxsqr:  x = 1.0\n"
+_argList="1.0"
+./test_expxsqr_accuracy -s ${_argList}
+printf "\nlibm expxsqr:  x = 1.0\n"
+./test_libm_expxsqr_accuracy -s ${_argList}
+printf "\n"
+
+printf "expxsqr:  Transition from 1.0 to nextafter(1.0)\n"
+_argList="0x1.6a09e667f3bccp-27 0x1.6a09e667f3bcdp-27"
+./test_expxsqr_accuracy -s ${_argList}
+printf "\nlibm expxsqr:  Transition from 1.0 to nextafter(1.0)\n"
+./test_libm_expxsqr_accuracy -s ${_argList}
+printf "\n"
+
+printf "expxsqr:  Transition from DBL_MAX to +Inf\n"
+_argList="0x1.aa4499161cd47p+4 0x1.aa4499161cd48p+4"
+./test_expxsqr_accuracy -s ${_argList}
+printf "\nlibm expxsqr:  Transition from DBL_MAX to +Inf\n"
+./test_libm_expxsqr_accuracy -s ${_argList}
+printf "\n"
+
+printf "expmxsqr:  Transition from non-zero to zero\n"
+_argList="0x1.b4c109b69b1b9p+4 0x1.b4c109b69b1bap+4"
+./test_expmxsqr_accuracy -s ${_argList}
+printf "\nlibm expmxsqr:  Transition from non-zero to zero\n"
+./test_libm_expmxsqr_accuracy -s ${_argList}
+printf "\n"
+
+printf "expmxsqr:  Transition from nextbefore(1.0) to 1.0\n"
+_argList="0x1.0000000000000p-27 0x1.0000000000001p-27"
+./test_expmxsqr_accuracy -s ${_argList}
+printf "\nlibm expmxsqr:  Transition from nextbefore(1.0) to 1.0\n"
+./test_libm_expmxsqr_accuracy -s ${_argList}
+printf "\n"

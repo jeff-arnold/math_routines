@@ -1,0 +1,23 @@
+#! /bin/bash
+#   -*-  mode:  shell-script  -*-
+#   Time-stamp:  "Modified on 23-October-2020 at 16:30:14 by jeff on Jeffs-MacBook-Pro.local"
+
+# set -vx
+
+_nPoints=${1:-'100000'}
+if [[ -n $2 ]]; then
+    _outFile1="expxsqr.$2"
+    _outFile2="expmxsqr.$2"
+else
+    _outFile1="/dev/null"
+    _outFile2="/dev/null"
+fi
+# _outFile=${2:-'/dev/null'}
+
+printf "expxsqr\n"
+./test_expxsqr_accuracy 0x1.6a09e667f3bccp-27 0x1.aa4499161cd48p+4 ${_nPoints} ${_outFile1}
+printf "\n"
+
+printf "expmxsqr\n"
+./test_expmxsqr_accuracy 0x1.0000000000000p-27 0x1.b4c109b69b1bap+4 ${_nPoints} ${_outFile2}
+printf "\n"
