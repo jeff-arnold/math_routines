@@ -137,13 +137,13 @@ expmxsqr(const double x) {
     const int scale_expo = -1022;
     int mm = (m < -scale_expo) ? m : m + scale_expo; // mm is either m if m < 1022 or m - 1022 if m >= 1022.
     // Multiply by 2^(-mm) by manipulating the exponent field directly.
-    // Because 0.5 < temp4 < 2.0, its unbiased exponent is -1, 0 or +1.  Since mm < 1022, subtracting it from the exponent field
-    // will not produce a subnormal or zero result.  However, the subsequent multiplication by 2^-1022, if it occurs, may produce
-    // such a result.
+    // Because 0.5 < temp4 < 2.0, its unbiased exponent is -1 or 0.  Since mm < 1022, subtracting it from the exponent field will
+    // not produce a subnormal or zero result.  However, the subsequent multiplication by 2^-1022, if it occurs, may produce such a
+    // result.
     IEEE_BIN64_UNION result; // "Safe in C" type-punning.
     result.d = DD_HI(temp4);
     result.ui64 = result.ui64 - ((uint64_t)(mm) << (DBL_MANT_DIG - 1));
-    // If m >= 1022, multiply the result by 2^-1022. This may produce a subnormal result.
+    // If m >= 1022, multiply the result by 2^-1022. This may produce a subnormal or zero result.
     if (m >= -scale_expo) result.d = 0x1.0p-1022 * result.d;
 
     return result.d;
