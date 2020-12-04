@@ -86,8 +86,7 @@ doOnePoint(double x) {
 
     mpfr_t mpfr_temp;
     mpfr_inits2(DEFAULT_MPFR_PREC, mpfr_temp, (mpfr_ptr)NULL);
-    mpfr_set_d(mpfr_temp, mpfr_result_d, MPFR_RNDN);
-    mpfr_sub(mpfr_temp, mpfr_result, mpfr_temp, MPFR_RNDN);
+    mpfr_sub_d(mpfr_temp, mpfr_result, mpfr_result_d, MPFR_RNDN);
     double corr = mpfr_get_d(mpfr_temp, MPFR_RNDN);
     // mpfr_printf(" REF "FUNC_NAME_STRING" = %.13Re (%.13Ra)\n", mpfr_result, mpfr_result);
     // mpfr_printf(" REF "FUNC_NAME_STRING" = %.34Re (%.26Ra)\n", mpfr_result, mpfr_result);
