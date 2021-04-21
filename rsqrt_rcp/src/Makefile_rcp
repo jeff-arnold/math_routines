@@ -1,0 +1,347 @@
+#   -*-  mode: makefile;  fill-column: 132  -*-
+#   Time-stamp: "Modified on 08-February-2016 at 17:53:57 by jeff on Jeffs-MacBook-Pro"
+
+#   Test and analysis programs:
+#
+#     test_rcp_1:  quick test of precise, Ofast, NR1 and NR2 results for x = 0.5f.
+#     test_rcp_2:  generate a datafile of the reference values of 1.0/x for float x in [1,2).  
+#     test_rcp_3:  generate a datafile with the results of rcp_ps(x) for x in [1,2).
+#     test_rcp_4:  generate a datafile with the results of rcp_Ofast(x) for x in [1,2).
+#     test_rcp_4a: generate a datafile with the results of rcp_Ofast_v(x) for x in [1,2).
+#     test_rcp_4b: generate a datafile with the results of rcp_Ofast_v_improved(x) for x in [1,2).
+#     test_rcp_4c: generate a datafile with the results of rcp_Ofast_v_improved_FMA(x) for x in [1,2).
+#     test_rcp_5:  verify that rcp_ps(x) for x in [1.0,2.0) matches SCALE * rcp_ps(y) for all normal floats.
+
+#-------------------------------------------------------------------------------
+#
+#   Configuration settings.
+#
+#   Default platform is "Intel".
+#   Default setting for CXX is g++.
+#
+#-------------------------------------------------------------------------------
+
+ifndef $(PLATFORM)
+PLATFORM=Intel
+endif
+
+ifeq ($(CXX),icc)
+SUFFIX=icc
+override CXX=icc
+else
+ifeq ($(CXX),clang)
+SUFFIX=clang
+override CXX=clang++
+else
+override CXX=g++
+CXXFLAGS+=-Wall
+SUFFIX=gcc
+endif
+endif
+
+.PHONY : all
+all :
+	echo "Nothing to do for default target \"all\".  Select a specific target."
+
+.PHONY : all_rcp_data
+all_rcp_data : rcp_instruction_$(SUFFIX)_$(PLATFORM).data \
+               rcp_reference_$(SUFFIX)_$(PLATFORM).data \
+               rcp_Ofast_$(SUFFIX)_$(PLATFORM).data \
+               rcp_Ofast_v_$(SUFFIX)_$(PLATFORM).data \
+               rcp_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).data \
+               rcp_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).data
+
+.PHONY : all_rcp_plots
+all_rcp_plots : rcp_instruction_$(SUFFIX)_$(PLATFORM).plot \
+                rcp_Ofast_$(SUFFIX)_$(PLATFORM).plot \
+                rcp_Ofast_v_$(SUFFIX)_$(PLATFORM).plot \
+                rcp_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).plot \
+                rcp_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).plot
+
+.PHONY : all_rcp_tests
+all_rcp_tests : test_rcp_1_$(SUFFIX) \
+                test_rcp_2_$(SUFFIX) \
+                test_rcp_3_$(SUFFIX) \
+                test_rcp_4a_$(SUFFIX) \
+                test_rcp_4b_$(SUFFIX) \
+                test_rcp_4c_$(SUFFIX) \
+                test_rcp_5_$(SUFFIX)
+
+.PHONY : all_rcp_analysis
+all_rcp_analysis : analyze_rcp_1_$(SUFFIX) \
+                   analyze_rcp_2_$(SUFFIX)
+
+.PHONY : all_rcp_s
+all_rcp_s : rcp_Ofast_$(SUFFIX).s \
+            rcp_Ofast_v_$(SUFFIX).s \
+            rcp_Ofast_v_improved_$(SUFFIX).s \
+            rcp_Ofast_v_improved_FMA_$(SUFFIX).s
+
+#-------------------------------------------------------------------------------
+#
+#   RCP testing targets
+#
+#-------------------------------------------------------------------------------
+
+test_rcp_1_$(SUFFIX) : test_rcp_1_$(SUFFIX).o rcp_Ofast_$(SUFFIX).o rcp_NR1_$(SUFFIX).o rcp_NR2_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rcp_1_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rcp_1_$(SUFFIX).o : test_rcp_1.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Routine which computes 1.0f/x compiled with -Ofast -mrecip=div.
+rcp_Ofast_$(SUFFIX).o rcp_Ofast_$(SUFFIX).s : CXXFLAGS += -Ofast -mavx -mrecip=div
+rcp_Ofast_$(SUFFIX).s : CXXFLAGS += -S
+rcp_Ofast_$(SUFFIX).o rcp_Ofast_$(SUFFIX).s : rcp_Ofast.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Verctorized (using intrinsics) routine which computes 1.0f/x compiled with -Ofast -mrecip=div.
+rcp_Ofast_v_$(SUFFIX).o rcp_Ofast_v_$(SUFFIX).s : CXXFLAGS += -Ofast -mavx -mrecip=div
+rcp_Ofast_v_$(SUFFIX).s : CXXFLAGS += -S
+rcp_Ofast_v_$(SUFFIX).o rcp_Ofast_v_$(SUFFIX).s : rcp_Ofast_v.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Verctorized (using intrinsics) routine which computes 1.0f/x using improved NR
+rcp_Ofast_v_improved_$(SUFFIX).o rcp_Ofast_v_improved_$(SUFFIX).s : CXXFLAGS += -O2 -mavx -mrecip=div
+rcp_Ofast_v_improved_$(SUFFIX).s : CXXFLAGS += -S
+rcp_Ofast_v_improved_$(SUFFIX).o rcp_Ofast_v_improved_$(SUFFIX).s : rcp_Ofast_v_improved.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Verctorized (using intrinsics) routine which computes 1.0f/x using improved NR and FMA
+rcp_Ofast_v_improved_FMA_$(SUFFIX).o rcp_Ofast_v_improved_FMA_$(SUFFIX).s : CXXFLAGS += -O2 -march=haswell -mavx -mrecip=div
+rcp_Ofast_v_improved_FMA_$(SUFFIX).s : CXXFLAGS += -S
+rcp_Ofast_v_improved_FMA_$(SUFFIX).o rcp_Ofast_v_improved_FMA_$(SUFFIX).s : rcp_Ofast_v_improved.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Routine which computes 1.0f/x with gcc-style Newton-Raphson iteration.
+rcp_NR1_$(SUFFIX).o rcp_NR1_$(SUFFIX).s : CXXFLAGS += -O2 -mavx
+rcp_NR1_$(SUFFIX).s : CXXFLAGS += -S
+rcp_NR1_$(SUFFIX).o rcp_NR1_$(SUFFIX).s : rcp_NR1.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Routine which computes 1.0f/x with improved Newton-Raphson iteration.
+rcp_NR2_$(SUFFIX).o rcp_NR2_$(SUFFIX).s : CXXFLAGS += -O2 -mavx
+rcp_NR2_$(SUFFIX).s : CXXFLAGS += -S
+rcp_NR2_$(SUFFIX).o rcp_NR2_$(SUFFIX).s : rcp_NR2.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rcp_2_$(SUFFIX) : test_rcp_2_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rcp_2_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rcp_2_$(SUFFIX).o : test_rcp_2.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rcp_3_$(SUFFIX) : test_rcp_3_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rcp_3_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rcp_3_$(SUFFIX).o : test_rcp_3.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rcp_4_$(SUFFIX) : test_rcp_4_$(SUFFIX).o rcp_Ofast_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rcp_4_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rcp_4_$(SUFFIX).o : test_rcp_4.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rcp_4a_$(SUFFIX) : test_rcp_4a_$(SUFFIX).o rcp_Ofast_v_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rcp_4a_$(SUFFIX).o : CXXFLAGS += -O0 -mavx -DVECTOR
+test_rcp_4a_$(SUFFIX).o : test_rcp_4.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rcp_4b_$(SUFFIX) : test_rcp_4b_$(SUFFIX).o rcp_Ofast_v_improved_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rcp_4b_$(SUFFIX).o : CXXFLAGS += -O0 -mavx -DVECTOR -DIMPROVED
+test_rcp_4b_$(SUFFIX).o : test_rcp_4.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rcp_4c_$(SUFFIX) : test_rcp_4c_$(SUFFIX).o rcp_Ofast_v_improved_FMA_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rcp_4c_$(SUFFIX).o : CXXFLAGS += -O0 -mavx -DVECTOR -DIMPROVED -DFMA
+test_rcp_4c_$(SUFFIX).o : test_rcp_4.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rcp_5_$(SUFFIX) : test_rcp_5_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rcp_5_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rcp_5_$(SUFFIX).o : test_rcp_5.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+analyze_rcp_1_$(SUFFIX) : analyze_rcp_1_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+analyze_rcp_1_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+analyze_rcp_1_$(SUFFIX).o : analyze_rcp_1.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+analyze_rcp_2_$(SUFFIX) : analyze_rcp_2_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+analyze_rcp_2_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+analyze_rcp_2_$(SUFFIX).o : analyze_rcp_2.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+analyze_rcp_2a_$(SUFFIX) : analyze_rcp_2a_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+analyze_rcp_2a_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+analyze_rcp_2a_$(SUFFIX).o : analyze_rcp_2a.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#-------------------------------------------------------------------------------
+#
+#   Targets to perform validation checks
+#
+#-------------------------------------------------------------------------------
+
+#   Verify that rcp_ps(x) for any float x matches scaled result from rcp_ps(x) for float x in [1,2) 
+verify_1_$(PLATFORM) : test_rcp_5_$(SUFFIX) rcp_instruction_$(SUFFIX)_$(PLATFORM).data
+	./test_rcp_5_$(SUFFIX) rcp_instruction_$(SUFFIX)_$(PLATFORM).data
+
+#-------------------------------------------------------------------------------
+#
+#   Data file targets
+#
+#-------------------------------------------------------------------------------
+
+#   Results for 1.0/x for x in [1,2)
+rcp_reference_$(SUFFIX)_$(PLATFORM).data : test_rcp_2_$(SUFFIX)
+	./test_rcp_2_$(SUFFIX) $@
+
+#   Results for rcp_ps(x) for float x in [1,2)
+rcp_instruction_$(SUFFIX)_$(PLATFORM).data : test_rcp_3_$(SUFFIX)
+	./test_rcp_3_$(SUFFIX) $@
+
+#   Results for 1.0/x for float x in [1,2) when compiled with -Ofast
+rcp_Ofast_$(SUFFIX)_$(PLATFORM).data : test_rcp_4_$(SUFFIX)
+	./test_rcp_4_$(SUFFIX) $@
+
+#   Results for vectorized 1.0/x for float x in [1,2)
+rcp_Ofast_v_$(SUFFIX)_$(PLATFORM).data : test_rcp_4a_$(SUFFIX)
+	./test_rcp_4a_$(SUFFIX) $@
+
+#   Results for vectorized 1.0/x with improved Newton-Raphson interation for float x in [1,2)
+rcp_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).data : test_rcp_4b_$(SUFFIX)
+	./test_rcp_4b_$(SUFFIX) $@
+
+#   Results for vectorized 1.0/x with improved Newton-Raphson interation using FMA for float x in [1,2)
+rcp_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).data : test_rcp_4c_$(SUFFIX)
+	./test_rcp_4c_$(SUFFIX) $@
+
+#-------------------------------------------------------------------------------
+#
+#   Plotting data file targets
+#
+#-------------------------------------------------------------------------------
+
+#   Data file for plotting errors of rcp_ps(x) for float x in [1,2); also produces information about the behavior of the instruction
+#   on the selected platform.
+rcp_instruction_$(SUFFIX)_$(PLATFORM).plot : analyze_rcp_1_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_instruction_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rcp_1_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_instruction_$(SUFFIX)_$(PLATFORM).data $@
+
+#   Data file for plotting the errors of rcp_ps(x) for float x in [1,2)
+rcp_Ofast_$(SUFFIX)_$(PLATFORM).plot : analyze_rcp_2_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_Ofast_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rcp_2_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_Ofast_$(SUFFIX)_$(PLATFORM).data $@
+
+#   Data file for plotting the errors of rcp_Ofast_v
+rcp_Ofast_v_$(SUFFIX)_$(PLATFORM).plot : analyze_rcp_2_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_Ofast_v_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rcp_2_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_Ofast_v_$(SUFFIX)_$(PLATFORM).data $@
+
+#   Plot file for plotting the errors of rcp_Ofast_v_improved
+rcp_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).plot : analyze_rcp_2_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rcp_2_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).data $@
+
+#   Plot file for plotting the errors of rcp_Ofast_v_improved_FMA
+rcp_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).plot : analyze_rcp_2_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rcp_2_$(SUFFIX) rcp_reference_$(SUFFIX)_$(PLATFORM).data rcp_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).data $@
+
+#-------------------------------------------------------------------------------
+#
+#   RCP timing targets
+#
+#-------------------------------------------------------------------------------
+
+.PHONY : time_rcp_all
+time_rcp_all : time_rcp_$(SUFFIX) \
+                 time_rcp_v_$(SUFFIX) \
+                 time_rcp_v_improved_$(SUFFIX) \
+                 time_rcp_v_improved_FMA_$(SUFFIX)
+
+time_rcp_$(SUFFIX) : time_rcp_$(SUFFIX).o \
+                       rcp_Ofast_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+time_rcp_$(SUFFIX).o : CXXFLAGS += -O0 -mavx -std=c++11
+time_rcp_$(SUFFIX).o : time_rcp.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+time_rcp_v_$(SUFFIX).o : CXXFLAGS += -O2 -mavx -std=c++11
+time_rcp_v_$(SUFFIX).o : CPPFLAGS += -DVECTOR
+time_rcp_v_$(SUFFIX).o : time_rcp.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+time_rcp_v_$(SUFFIX) : time_rcp_v_$(SUFFIX).o \
+                         rcp_Ofast_v_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+time_rcp_v_improved_$(SUFFIX).o : CXXFLAGS += -O2 -mavx -std=c++11
+time_rcp_v_improved_$(SUFFIX).o : CPPFLAGS += -DVECTOR -DIMPROVED
+time_rcp_v_improved_$(SUFFIX).o : time_rcp.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+time_rcp_v_improved_$(SUFFIX) : time_rcp_v_improved_$(SUFFIX).o \
+                                  rcp_Ofast_v_improved_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+time_rcp_v_improved_FMA_$(SUFFIX).o : CXXFLAGS += -O2 -mavx -mfma -std=c++11
+time_rcp_v_improved_FMA_$(SUFFIX).o : CPPFLAGS += -DVECTOR -DIMPROVED -DFMA
+time_rcp_v_improved_FMA_$(SUFFIX).o : time_rcp.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+time_rcp_v_improved_FMA_$(SUFFIX) : time_rcp_v_improved_FMA_$(SUFFIX).o \
+                                      rcp_Ofast_v_improved_FMA_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+#-------------------------------------------------------------------------------
+#
+#   Clean-up targets
+#
+#-------------------------------------------------------------------------------
+
+.PHONY : clean_test
+clean_test :
+	rm -rf test_rcp_1_$(SUFFIX){,.o}
+	rm -rf rcp_Ofast{,_v{,_improved{,_FMA}}}_$(SUFFIX){.o,.s}
+	rm -rf rcp_NR{1,2}_$(SUFFIX){.o,.s}
+	rm -rf test_rcp_{2,3,4{,a,b,c},5}_$(SUFFIX){,.o}
+	rm -rf analyze_rcp_{1,2}_$(SUFFIX){,.o}
+
+.PHONY : clean_time
+clean_time :
+	rm -rf time_rcp{,_v{,_improved{,_FMA}}}_$(SUFFIX){,.o}
+	rm -rf rcp_Ofast{,_v{,_improved{,_FMA}}}_$(SUFFIX){.o,.s}
+
+.PHONY : realclean
+realclean :
+	$(MAKE) -f ${MAKEFILE_LIST} CXX=clang clean_test clean_time
+	$(MAKE) -f ${MAKEFILE_LIST} CXX=gcc clean_test clean_time
+	$(MAKE) -f ${MAKEFILE_LIST} CXX=icc clean_test clean_time
+
+.PHONY : clean_data
+clean_data :
+	rm -rf rcp_reference_$(SUFFIX)_$(PLATFORM).data
+	rm -rf rcp_instruction_$(SUFFIX)_$(PLATFORM).data
+	rm -rf rcp_Ofast{,_v{,_improved{,_FMA}}}_$(SUFFIX)_$(PLATFORM).data
+
+.PHONY : clean_plots
+clean_plots :
+	rm -rf rcp_instruction_$(SUFFIX)_$(PLATFORM).plot
+	rm -rf rcp_Ofast{,_v{,_improved{,_FMA}}}_$(SUFFIX)_$(PLATFORM).plot

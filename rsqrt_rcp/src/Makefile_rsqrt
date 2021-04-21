@@ -1,0 +1,347 @@
+#   -*-  mode: makefile;  fill-column: 132  -*-
+#   Time-stamp: "Modified on 30-January-2016 at 14:18:57 by jeff on Jeffs-MacBook-Pro"
+
+#   Test and analysis programs:
+#
+#     test_rsqrt_1:  quick test of precise, Ofast, NR1 and NR2 results for x = 0.1f.
+#     test_rsqrt_2:  generate a datafile of the results of 1.0f/std::sqrt(x) for x in [1,4).
+#     test_rsqrt_3:  generate a datafile with the results of rsqrt_ps(x) for x in [1,4).
+#     test_rsqrt_4:  generate a datafile with the results of rsqrt_Ofast(x) for x in [1,4).
+#     test_rsqrt_4a: generate a datafile with the results of rsqrt_Ofast_v(x) for x in [1,4).
+#     test_rsqrt_4b: generate a datafile with the results of rsqrt_Ofast_v_improved(x) for x in [1,4).
+#     test_rsqrt_4c: generate a datafile with the results of rsqrt_Ofast_v_improved_FMA(x) for x in [1,4).
+#     test_rsqrt_5:  verify that rsqrt_ps(x) for x in [1.0,4.0) matches SCALE * rsqrt_ps(y) for all normal floats.
+
+#-------------------------------------------------------------------------------
+#
+#   Configuration settings.
+#
+#   Default platform is "Intel".
+#   Default setting for CXX is g++.
+#
+#-------------------------------------------------------------------------------
+
+ifndef $(PLATFORM)
+PLATFORM=Intel
+endif
+
+ifeq ($(CXX),icc)
+SUFFIX=icc
+override CXX=icc
+else
+ifeq ($(CXX),clang)
+SUFFIX=clang
+override CXX=clang++
+else
+override CXX=g++
+CXXFLAGS+=-Wall
+SUFFIX=gcc
+endif
+endif
+
+.PHONY : all
+all :
+	echo "Nothing to do for default target \"all\".  Select a specific target."
+
+.PHONY : all_rsqrt_data
+all_rsqrt_data : rsqrt_instruction_$(SUFFIX)_$(PLATFORM).data \
+                 rsqrt_reference_$(SUFFIX)_$(PLATFORM).data \
+                 rsqrt_Ofast_$(SUFFIX)_$(PLATFORM).data \
+                 rsqrt_Ofast_v_$(SUFFIX)_$(PLATFORM).data \
+                 rsqrt_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).data \
+                 rsqrt_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).data
+
+.PHONY : all_rsqrt_plots
+all_rsqrt_plots : rsqrt_instruction_$(SUFFIX)_$(PLATFORM).plot \
+                  rsqrt_Ofast_$(SUFFIX)_$(PLATFORM).plot \
+                  rsqrt_Ofast_v_$(SUFFIX)_$(PLATFORM).plot \
+                  rsqrt_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).plot \
+                  rsqrt_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).plot
+
+.PHONY : all_rsqrt_tests
+all_rsqrt_tests : test_rsqrt_1_$(SUFFIX) \
+                  test_rsqrt_2_$(SUFFIX) \
+                  test_rsqrt_3_$(SUFFIX) \
+                  test_rsqrt_4a_$(SUFFIX) \
+                  test_rsqrt_4b_$(SUFFIX) \
+                  test_rsqrt_4c_$(SUFFIX) \
+                  test_rsqrt_5_$(SUFFIX)
+
+.PHONY : all_rsqrt_analysis
+all_rsqrt_analysis : analyze_rsqrt_1_$(SUFFIX) \
+                     analyze_rsqrt_2_$(SUFFIX)
+
+.PHONY : all_rsqrt_s
+all_rsqrt_s : rsqrt_Ofast_$(SUFFIX).s \
+              rsqrt_Ofast_v_$(SUFFIX).s \
+              rsqrt_Ofast_v_improved_$(SUFFIX).s \
+              rsqrt_Ofast_v_improved_FMA_$(SUFFIX).s
+
+#-------------------------------------------------------------------------------
+#
+#   RSQRT testing targets
+#
+#-------------------------------------------------------------------------------
+
+test_rsqrt_1_$(SUFFIX) : test_rsqrt_1_$(SUFFIX).o rsqrt_Ofast_$(SUFFIX).o rsqrt_NR1_$(SUFFIX).o rsqrt_NR2_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rsqrt_1_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rsqrt_1_$(SUFFIX).o : test_rsqrt_1.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Routine which computes 1.0f/std:sqrt(x) compiled with -Ofast.
+rsqrt_Ofast_$(SUFFIX).o rsqrt_Ofast_$(SUFFIX).s : CXXFLAGS += -Ofast -mavx
+rsqrt_Ofast_$(SUFFIX).s : CXXFLAGS += -S
+rsqrt_Ofast_$(SUFFIX).o rsqrt_Ofast_$(SUFFIX).s : rsqrt_Ofast.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Verctorized (using intrinsics) routine which computes 1.0f/std:sqrt(x) compiled with -Ofast.
+rsqrt_Ofast_v_$(SUFFIX).o rsqrt_Ofast_v_$(SUFFIX).s : CXXFLAGS += -Ofast -mavx
+rsqrt_Ofast_v_$(SUFFIX).o : rsqrt_Ofast_v.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+rsqrt_Ofast_v_$(SUFFIX).s : rsqrt_Ofast_v.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -S -c -o $@ $^
+
+#   Verctorized (using intrinsics) routine which computes 1.0f/std:sqrt(x) using improved NR
+rsqrt_Ofast_v_improved_$(SUFFIX).o rsqrt_Ofast_v_improved_$(SUFFIX).s : CXXFLAGS += -O2 -mavx
+rsqrt_Ofast_v_improved_$(SUFFIX).o : rsqrt_Ofast_v_improved.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+rsqrt_Ofast_v_improved_$(SUFFIX).s : rsqrt_Ofast_v_improved.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -S -c -o $@ $^
+
+#   Verctorized (using intrinsics) routine which computes 1.0f/std:sqrt(x) using improved NR and FMA
+rsqrt_Ofast_v_improved_FMA_$(SUFFIX).o rsqrt_Ofast_v_improved_FMA_$(SUFFIX).s : CXXFLAGS += -O2 -mavx -mfma
+rsqrt_Ofast_v_improved_FMA_$(SUFFIX).o : rsqrt_Ofast_v_improved.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+rsqrt_Ofast_v_improved_FMA_$(SUFFIX).s : rsqrt_Ofast_v_improved.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -S -c -o $@ $^
+
+#   Routine which computes 1.0f/std:sqrt(x) with gcc-style Newton-Raphson iteration.
+rsqrt_NR1_$(SUFFIX).o rsqrt_NR1_$(SUFFIX).s : CXXFLAGS += -O0 -mavx
+rsqrt_NR1_$(SUFFIX).s : CXXFLAGS += -S
+rsqrt_NR1_$(SUFFIX).o rsqrt_NR1_$(SUFFIX).s : rsqrt_NR1.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#   Routine which computes 1.0f/std:sqrt(x) with improved Newton-Raphson iteration.
+rsqrt_NR2_$(SUFFIX).o rsqrt_NR2_$(SUFFIX).s : CXXFLAGS += -O0 -mavx
+rsqrt_NR2_$(SUFFIX).s : CXXFLAGS += -S
+rsqrt_NR2_$(SUFFIX).o rsqrt_NR2_$(SUFFIX).s : rsqrt_NR2.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+
+test_rsqrt_2_$(SUFFIX) : test_rsqrt_2_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rsqrt_2_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rsqrt_2_$(SUFFIX).o : test_rsqrt_2.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rsqrt_3_$(SUFFIX) : test_rsqrt_3_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rsqrt_3_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rsqrt_3_$(SUFFIX).o : test_rsqrt_3.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rsqrt_4_$(SUFFIX) : test_rsqrt_4_$(SUFFIX).o rsqrt_Ofast_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rsqrt_4_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rsqrt_4_$(SUFFIX).o : test_rsqrt_4.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rsqrt_4a_$(SUFFIX) : test_rsqrt_4a_$(SUFFIX).o rsqrt_Ofast_v_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rsqrt_4a_$(SUFFIX).o : CXXFLAGS += -O0 -mavx -DVECTOR
+test_rsqrt_4a_$(SUFFIX).o : test_rsqrt_4.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rsqrt_4b_$(SUFFIX) : test_rsqrt_4b_$(SUFFIX).o rsqrt_Ofast_v_improved_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rsqrt_4b_$(SUFFIX).o : CXXFLAGS += -O0 -mavx -DVECTOR -DIMPROVED
+test_rsqrt_4b_$(SUFFIX).o : test_rsqrt_4.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rsqrt_4c_$(SUFFIX) : test_rsqrt_4c_$(SUFFIX).o rsqrt_Ofast_v_improved_FMA_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rsqrt_4c_$(SUFFIX).o : CXXFLAGS += -O0 -mavx -DVECTOR -DIMPROVED -DFMA
+test_rsqrt_4c_$(SUFFIX).o : test_rsqrt_4.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+test_rsqrt_5_$(SUFFIX) : test_rsqrt_5_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+test_rsqrt_5_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+test_rsqrt_5_$(SUFFIX).o : test_rsqrt_5.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+analyze_rsqrt_1_$(SUFFIX) : analyze_rsqrt_1_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+analyze_rsqrt_1_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+analyze_rsqrt_1_$(SUFFIX).o : analyze_rsqrt_1.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+analyze_rsqrt_2_$(SUFFIX) : analyze_rsqrt_2_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+analyze_rsqrt_2_$(SUFFIX).o : CXXFLAGS += -O0 -mavx
+analyze_rsqrt_2_$(SUFFIX).o : analyze_rsqrt_2.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+#-------------------------------------------------------------------------------
+#
+#   Targets to perform validation checks
+#
+#-------------------------------------------------------------------------------
+
+#   Verify that rsqrt_ss(x) for any float x matches the scaled result from rsqrt_ss(x) for x in [1,4) 
+.PHONY : verify_1_$(PLATFORM)
+verify_1_$(PLATFORM) : test_rsqrt_5_$(SUFFIX) rsqrt_instruction_$(SUFFIX)_$(PLATFORM).data
+	./test_rsqrt_5_$(SUFFIX) rsqrt_instruction_$(SUFFIX)_$(PLATFORM).data
+
+#-------------------------------------------------------------------------------
+#
+#   Data file targets
+#
+#-------------------------------------------------------------------------------
+
+#   Results for 1.0/sqrt(x) for x in [1,4)
+rsqrt_reference_$(SUFFIX)_$(PLATFORM).data : test_rsqrt_2_$(SUFFIX)
+	./test_rsqrt_2_$(SUFFIX) $@
+
+#   Results for rsqrt_ss(x) for x in [1,4)
+rsqrt_instruction_$(SUFFIX)_$(PLATFORM).data : test_rsqrt_3_$(SUFFIX)
+	./test_rsqrt_3_$(SUFFIX) $@
+
+#   Results for 1.0/sqrt(x) for x in [1,4) when compiled with -Ofast
+rsqrt_Ofast_$(SUFFIX)_$(PLATFORM).data : test_rsqrt_4_$(SUFFIX)
+	./test_rsqrt_4_$(SUFFIX) $@
+
+#   Results for vectorized rsqrt_ps(x) for x in [1,4)
+rsqrt_Ofast_v_$(SUFFIX)_$(PLATFORM).data : test_rsqrt_4a_$(SUFFIX)
+	./test_rsqrt_4a_$(SUFFIX) $@
+
+#   Results for vectorized rsqrt_ps(x) with improved Newton-Raphson interation for x in [1,4)
+rsqrt_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).data : test_rsqrt_4b_$(SUFFIX)
+	./test_rsqrt_4b_$(SUFFIX) $@
+
+#   Results for vectorized rsqrt_ps(x) with improved Newton-Raphson interation using FMA for x in [1,4)
+rsqrt_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).data : test_rsqrt_4c_$(SUFFIX)
+	./test_rsqrt_4c_$(SUFFIX) $@
+
+#-------------------------------------------------------------------------------
+#
+#   Plotting data file targets
+#
+#-------------------------------------------------------------------------------
+
+#   Data file for plotting errors of rsqrt_ss(x) for x in [1,4)
+rsqrt_instruction_$(SUFFIX)_$(PLATFORM).plot : analyze_rsqrt_1_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_instruction_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rsqrt_1_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_instruction_$(SUFFIX)_$(PLATFORM).data $@
+
+#   Data file for plotting the errors of rsqrt_ss(x) for x in [1,4)
+rsqrt_Ofast_$(SUFFIX)_$(PLATFORM).plot : analyze_rsqrt_2_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_Ofast_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rsqrt_2_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_Ofast_$(SUFFIX)_$(PLATFORM).data $@
+
+#   Data file for plotting the errors of rsqrt_Ofast_v for x in [1,4)
+rsqrt_Ofast_v_$(SUFFIX)_$(PLATFORM).plot : analyze_rsqrt_2_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_Ofast_v_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rsqrt_2_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_Ofast_v_$(SUFFIX)_$(PLATFORM).data $@
+
+#   Plot file for plotting the errors of rsqrt_Ofast_v_improved for x in [1,4)
+rsqrt_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).plot : analyze_rsqrt_2_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rsqrt_2_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_Ofast_v_improved_$(SUFFIX)_$(PLATFORM).data $@
+
+#   Plot file for plotting the errors of rsqrt_Ofast_v_improved_FMA for x in [1,4)
+rsqrt_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).plot : analyze_rsqrt_2_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).data
+	./analyze_rsqrt_2_$(SUFFIX) rsqrt_reference_$(SUFFIX)_$(PLATFORM).data rsqrt_Ofast_v_improved_FMA_$(SUFFIX)_$(PLATFORM).data $@
+
+#-------------------------------------------------------------------------------
+#
+#   RSQRT timing targets
+#
+#-------------------------------------------------------------------------------
+
+.PHONY : time_rsqrt_all
+time_rsqrt_all : time_rsqrt_$(SUFFIX) \
+                 time_rsqrt_v_$(SUFFIX) \
+                 time_rsqrt_v_improved_$(SUFFIX) \
+                 time_rsqrt_v_improved_FMA_$(SUFFIX)
+
+time_rsqrt_$(SUFFIX) : time_rsqrt_$(SUFFIX).o \
+                       rsqrt_Ofast_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+time_rsqrt_$(SUFFIX).o : CXXFLAGS += -O0 -mavx -std=c++11
+time_rsqrt_$(SUFFIX).o : time_rsqrt.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+time_rsqrt_v_$(SUFFIX).o : CXXFLAGS += -O2 -mavx -std=c++11
+time_rsqrt_v_$(SUFFIX).o : CPPFLAGS += -DVECTOR
+time_rsqrt_v_$(SUFFIX).o : time_rsqrt.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+time_rsqrt_v_$(SUFFIX) : time_rsqrt_v_$(SUFFIX).o \
+                         rsqrt_Ofast_v_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+time_rsqrt_v_improved_$(SUFFIX).o : CXXFLAGS += -O2 -mavx -std=c++11
+time_rsqrt_v_improved_$(SUFFIX).o : CPPFLAGS += -DVECTOR -DIMPROVED
+time_rsqrt_v_improved_$(SUFFIX).o : time_rsqrt.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+time_rsqrt_v_improved_$(SUFFIX) : time_rsqrt_v_improved_$(SUFFIX).o \
+                                  rsqrt_Ofast_v_improved_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+time_rsqrt_v_improved_FMA_$(SUFFIX).o : CXXFLAGS += -O2 -mavx -mfma -std=c++11
+time_rsqrt_v_improved_FMA_$(SUFFIX).o : CPPFLAGS += -DVECTOR -DIMPROVED -DFMA
+time_rsqrt_v_improved_FMA_$(SUFFIX).o : time_rsqrt.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
+
+time_rsqrt_v_improved_FMA_$(SUFFIX) : time_rsqrt_v_improved_FMA_$(SUFFIX).o \
+                                      rsqrt_Ofast_v_improved_FMA_$(SUFFIX).o
+	$(CXX) -o $@ $^
+
+#-------------------------------------------------------------------------------
+#
+#   Clean-up targets
+#
+#-------------------------------------------------------------------------------
+
+.PHONY : clean_test
+clean_test :
+	rm -rf test_rsqrt_1_$(SUFFIX){,.o}
+	rm -rf rsqrt_Ofast{,_v{,_improved{,_FMA}}}_$(SUFFIX){.o,.s}
+	rm -rf rsqrt_NR{1,2}_$(SUFFIX){.o,.s}
+	rm -rf test_rsqrt_{2,3,4{,a,b,c},5}_$(SUFFIX){,.o}
+	rm -rf analyze_rsqrt_{1,2}_$(SUFFIX){,.o}
+
+.PHONY : clean_time
+clean_time :
+	rm -rf time_rsqrt{,_v{,_improved{,_FMA}}}_$(SUFFIX){,.o}
+	rm -rf rsqrt_Ofast{,_v{,_improved{,_FMA}}}_$(SUFFIX){.o,.s}
+
+.PHONY : realclean
+realclean :
+	$(MAKE) -f ${MAKEFILE_LIST} CXX=clang clean_test clean_time
+	$(MAKE) -f ${MAKEFILE_LIST} CXX=gcc clean_test clean_time
+	$(MAKE) -f ${MAKEFILE_LIST} CXX=icc clean_test clean_time
+
+.PHONY : clean_data
+clean_data :
+	rm -rf rsqrt_reference_$(SUFFIX)_$(PLATFORM).data
+	rm -rf rsqrt_instruction_$(SUFFIX)_$(PLATFORM).data
+	rm -rf rsqrt_Ofast{,_v{,_improved{,_FMA}}}_$(SUFFIX)_$(PLATFORM).data
+
+.PHONY : clean_plots
+clean_plots :
+	rm -rf rsqrt_instruction_$(SUFFIX)_$(PLATFORM).plot
+	rm -rf rsqrt_Ofast{,_v{,_improved{,_FMA}}}_$(SUFFIX)_$(PLATFORM).plot
